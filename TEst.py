@@ -1,155 +1,134 @@
 from collections import Counter
 import sys
+import pickle
 
 
-def write_binary(text):
-    s_result = ''
-    a_1 = ''
-    for i in range(len(text)):
-        a_1 += text[i]
-        if (i + 1) % 8 == 0:
-            s_result += ''.join(int(a_1, 2).to_bytes(1, "big"))
-            a_1 = ''
-        elif (i + 1) == len(text):
-            s_result += ''.join(int(a_1, 2).to_bytes(1, "big"))
-    return s_result
+def bytes(current_byte, out_f):  # Метод для байтовой записи
+    while len(current_byte) > 8:
+        print(int(current_byte[0:8], 2))
+        out_f.write(int(current_byte[0:8], 2).to_bytes(1, "big"))
+        current_byte = current_byte[8:]
+    return current_byte
 
 
-def encode(input_file, output_file):
-    s_bin = ''
-    outp = open(f'{output_file}', 'w', encoding='UTF-8')
-    inp = open(f'{input_file}', 'r', encoding='UTF-8')
-
-    def dict(string):  # Создаем закодированный словарь из строки
-
-        arr = Counter(string)  # Создаем словарь из строки
-        vertexes = [[el, arr[el], [], []] for el in arr]
-
-        while len(vertexes) > 1:
-            vertexes.sort(key=lambda x: x[1])
-            x1 = vertexes.pop(0)
-            x2 = vertexes.pop(0)
-            new = [x1[0] + x2[0], x1[1] + x2[1], x1, x2]
-            vertexes.append(new)
-
-        codes = {}
-
-        def search(paht, vertex):
-            if len(vertex[2]) > 1:
-                search(paht + "0", vertex[2])
-
-            if len(vertex[3]) > 0:
-                search(paht + "1", vertex[3])
-
+def dictionary(text):  # Метод для создания словаря вида [буква: кол-во вхождений]
+    dctnr = dict()
+    for line in text:
+        for i in line:
+            if i in dctnr:
+                dctnr[i] += 1
             else:
-                codes[vertex[0]] = paht
-                return
+                dctnr.update({i: 1})
+    return dctnr
 
-        search("", vertexes[0])
-        return codes
 
-    text =
-    a_1 = ' '
-    while a_1 != '':
-        a_1 = inp.readline()
-        text += a_1
+def graph_creator(arr):  # метод для создания графа
+    vertexes = [[el, arr[el], [], []] for el in arr]  # создаем массив вида [элемент, его размер, ребенок, ребенок]
 
-    codes_n = dict(text)
+    while len(vertexes) > 1:
+        vertexes.sort(key=lambda x: x[1])
+        x1 = vertexes.pop(0)
+        x2 = vertexes.pop(0)
+        new = [x1[0] + x2[0], x1[1] + x2[1], x1, x2]
+        vertexes.append(new)
 
-    len_codes_b = len(codes_n)
-    outp.write(str(len_codes_b).encode("UTF-8"))
+    codes = {}
 
-    for i in text:
-        s_bin += codes_n.get(i)  # Пробегаем по строке и кодируем ее
+    def search(path, vertex):  # метод для поиска адреса вершины
+        if len(vertex[2]) > 1:
+            search(path + "0", vertex[2])
 
-    for i in codes_n:
-        if i == '\n':
-            outp.write(i+' '.encode("UTF-8"))
-            outp.write(int(str(codes_n.get(i)), 2).to_bytes(1, "big"))
-            outp.write("\n".encode("UTF-8"))
+        if len(vertex[3]) > 0:
+            search(path + "1", vertex[3])
+
         else:
-            outp.write((i+' ').encode("UTF-8"))
-            outp.write(int(str(codes_n.get(i)), 2).to_bytes(1, "big"))
-            outp.write("\n".encode("UTF-8"))
-    a = write_binary(s_bin)
-    outp.write(a)  # Записываем в файл закодированную строку
+            codes[vertex[0]] = path
+            return
 
-    inp.close()
-    outp.close()
+    search("", vertexes[0])
+    return codes
+
+
+def encode(infile, outfile: str):
+    inf = open(infile, 'r')
+    out = open(outfile, 'wb')
+    text = inf.readlines()
+    a = dictionary(text)  # создаем словарь
+    codes = graph_creator(a)  # создаем граф
+    print(a)
+    # print(codes)
+
+    len_codes = len(codes)
+    out.write(f'{len_codes}\n'.encode("UTF-8"))  # записываем в файл мощность словаря
+    for i in a.keys():  # записываем в файл словарь вида {символ : кол-во вхождений}
+        line = i + " "
+        out.write(line.encode())
+        out.write(int(a[i]).to_bytes(2, "big"))
+        out.write("\n".encode())
+        # print(int(a[i]))
+    current_byte = ''
+    for i in text:  #
+        for line in i:
+            current_byte += codes[line]  # Для каждого символа записываем в current_byte его код в виде строки
+            current_byte = bytes(current_byte, out)  # Отправляем в метод для побайтовой записи
+
+    extra_bits = 8 - len(current_byte)  # проверяем на недозаписанные биты
+    current_byte = current_byte + "0" * extra_bits  # Дозаполняем строку нулями
+    out.write(int(current_byte, 2).to_bytes(2, "big"))
+    out.write(extra_bits.to_bytes(1, "big"))  # Сохраняем то, сколько битов дописали
+    inf.close()
+    out.close()
 
 
 def decode(input_file, output_file):
-    inp = open(f'{input_file}', 'r')
-    outp = open(f'{output_file}', 'wb')
+    inp = open(input_file, 'rb')
+    out = open(output_file, 'w')
 
-    codes = {}
-    string_row = ''
-    row = inp.readline()
-    len_codes = int(row)
-    str_result = ''
-    string_result = ''
-    s = ''
-    for i in range(len_codes):  # Записываем словарь для декодирования
-        row = inp.readline()
-        if row[0] == ' ':
-            row = row.split()[0]
-            codes.update({row: ' '})
-        elif row[:2] == '/n':
-            row = row.split()
-            codes.update({row[1]: '\n'})
-        else:
-            a, b = map(str, row.split())
-            codes.update({b: a})
+    freq_dict = {}
+    current_byte = ""
+    current_code = ""
+    print()
 
-    len_last = 0
-    a_1 = ' '
-    string_row = ''
-    while a_1 != '':
-        a_1 = inp.readline()
-        string_row += a_1
-    outp.write()
-    array_row = []
-    '''for i in range(len(string_row)-1):
-        a_2 += string_row[i]
-        if string_row[i+1] == ' ':
-            array_row.append(a_2)
-            a_2 = ''
-        elif string_row[i+1] != ' ':
-            pass'''
-    ''' for ii in range(len(string_row)): # Проходимся по строке и декодируем ее в бинарник
-        try:
-            row_s = str(bin(ord(string_row[ii])))[2:]
-        except:pass
-        if ii == len(string_row)-1:
-            len_last = int(string_row[ii][:1])
-            row_s = str(bin(ord(string_row[ii][1:])))[2:]
-            if len(row_s) != len_last and len_last != 0:
-                    row_s = row_s[::-1]
-                    for i in range(len_last-len(row_s)):
-                        row_s += '0'
-                    row_s = row_s[::-1]
-            str_result += row_s
-        elif len(row_s)%8 != 0:
-            row_s = row_s[::-1]
-            for i in range(8-len(row_s)):
-                row_s += '0'
-            row_s = row_s[::-1]
-            str_result += row_s
-        else:
-            str_result += row_s
-    for ii in str_result: # Проходимся по строке и декодируем ее
-        s += ii
-        if s in codes:
-            string_result += codes.get(s)
-            s = ''
-    outp.write(string_result) # Записываем в файл декодированную строку
-    '''
-    outp.close()
+    n = int(inp.readline())
+    for i in range(n):  # дешифруем словарь
+        current_line = inp.readline()  # Считываем очередную строку
+        if current_line == b'\n':  # проверяем на перенос строки
+            current_line = inp.readline()
+            key = round((int.from_bytes(current_line[1:], "big")) / 266)
+            char = "\n"
+            freq_dict.update({char: key})
+            continue
+        key = round((int.from_bytes(current_line[2:], "big")) / 266)
+        char = chr(current_line[0])
+        freq_dict.update({char: key})
+    print(freq_dict)
+
+    verticles_list = graph_creator(freq_dict)
+
+    for line in inp.readlines():  # Переводим каждый байт входного файла в строку
+        for i in line:
+            current_byte += "0" * (10 - len(str(bin(i)))) + str(bin(i))[2:]
+
+    extra_bits = int(current_byte[-8:], 2)  # Проверяем последний байт, в котором содержится лишние биты
+    current_byte = current_byte[:-(8 + extra_bits)]  # Удаляем лишние биты
+    codes_dict_new = {}
+
+    for i in verticles_list.keys():  # Меняем местами ключ и значения словаря с кодами
+        codes_dict_new.update({verticles_list[i]: i})
+
+    for i in current_byte:
+        current_code += i  # Наращиваем пока не станет соответствовать одному из шифров
+        if current_code in codes_dict_new.keys():
+            out.write(codes_dict_new[current_code])
+            current_code = ""
+
+    inp.close()
+    out.close()
 
 
+codes = {}
 encode('r.txt', '2.txt')
-# decode('2.txt','3.txt')
-
+decode('2.txt', '3.txt')
 
 '''if len(sys.argv) < 4:
     raise "Not enough arguments"
