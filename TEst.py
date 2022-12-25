@@ -1,6 +1,5 @@
-from collections import Counter
 import sys
-import pickle
+
 
 
 def bytes(current_byte, out_f):  # Метод для байтовой записи
